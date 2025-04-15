@@ -1,0 +1,32 @@
+---
+- name: Install required system packages
+  yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+    state: present
+
+- name: Add Docker repo
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+
+- name: Install Docker
+  yum:
+    name: docker-ce
+    state: latest
+
+- name: Start and enable Docker
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Run nginx container
+  docker_container:
+    name: nginx
+    image: nginx:latest
+    state: started
+    ports:
+      - "80:80"

@@ -1,0 +1,25 @@
+---
+  users_to_ensure_removed:
+  - t
+  - m
+  - u
+  - s
+  - yd
+  users:
+    davidstent:
+      name: David
+      pub_key: 
+    aaronhine:
+      name: Aaron
+      pub_key: 
+    stevehutter:
+      name: Steve
+      pub_key: 
+    tomfarrar:
+      name: Tom 
+      pub_key:
+    helendalessio:
+      name: He
+      pub_key: 
+      name: Moha
+      pub_key: 

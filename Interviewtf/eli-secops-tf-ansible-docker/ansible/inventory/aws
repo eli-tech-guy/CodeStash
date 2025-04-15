@@ -1,0 +1,8 @@
+[gateway]
+secops-reptool-dmz-gateway-01
+
+[jump]
+secops-reptool-dmz-jump-01
+
+[app]
+secops-reptool-app-01

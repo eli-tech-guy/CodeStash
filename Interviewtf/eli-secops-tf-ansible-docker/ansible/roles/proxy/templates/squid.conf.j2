@@ -1,0 +1,22 @@
+acl allowed_destinations dstdomain secopsdn-incoming.s3.eu-west-2.amazonaws.com secops
+
+acl allowed_clients src 10.0.0.0/22
+
+acl SSL_ports port 443
+acl Safe_ports port 80          # http
+acl Safe_ports port 443         # https
+acl CONNECT method CONNECT
+http_access deny !Safe_ports
+http_access allow localhost manager
+http_access deny manager
+http_access deny !allowed_clients
+http_access allow allowed_destinations
+http_access deny all
+http_port 3128
+coredump_dir /var/spool/squid
+
+####
+# Disable any caching
+
+cache deny all
+cache_dir null /tmp

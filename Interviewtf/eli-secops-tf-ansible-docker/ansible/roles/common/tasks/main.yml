@@ -1,0 +1,74 @@
+---
+- name: Deploy proxy before all else
+  copy:
+    src: proxy.sh
+    dest: /etc/profile.d/
+    mode: u+rwx,g-w,o-w
+  tags: proxy_client
+
+- name: Ensure hostname set
+  hostname: name={{ inventory_hostname }}
+  when: not inventory_hostname|match('(\d{1,3}\.){3}\d{1,3}')
+  tags: hostname
+
+- name: Ensure hostname is in /etc/hosts
+  lineinfile:
+    dest=/etc/hosts
+    regexp="^{{ ansible_default_ipv4.address }}.+$"
+    line="{{ ansible_default_ipv4.address }} {{ ansible_hostname }}"
+  tags: hostname
+
+- name: Disallow root from ssh login
+  lineinfile: >
+    dest=/etc/ssh/sshd_config
+    regexp="^PermitRootLogin"
+    line="PermitRootLogin no"
+    state=present
+  notify: restart sshd
+  tags: ssh
+
+- name: Disallow password based ssh logins
+  lineinfile: >
+    dest=/etc/ssh/sshd_config
+    regexp="^PasswordAuthentication"
+    line="PasswordAuthentication no"
+    state=present
+  notify: restart sshd
+  tags: ssh
+
+- name: Create admin group
+  group: name=admin state=present
+  tags: ssh
+
+- name: Ensure members of the admin group can sudo without password
+  copy:
+    dest: /etc/sudoers.d/admin
+    content: "%admin ALL = (ALL) NOPASSWD: ALL"
+    owner: root
+    group: root
+    mode: 660
+  tags: ssh
+
+- name: Create users
+  user: >
+    name="{{ item.key }}"
+    comment="{{ item.value.name }}"
+    shell=/bin/bash
+    groups=admin
+  with_dict: "{{users}}"
+  tags: ssh
+
+- name: Set authorized key for users
+  authorized_key: >
+    user="{{ item.key }}"
+    key="{{ item.value.pub_key }}"
+  with_dict: "{{users}}"
+  tags: ssh
+
+- name: Remove users
+  user: >
+    name="{{ item }}"
+    state=absent
+    remove=yes
+  with_items: "{{ users_to_ensure_removed }}"
+  tags: ssh
