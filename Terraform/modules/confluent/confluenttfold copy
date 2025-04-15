@@ -1,0 +1,173 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
+locals {
+  env                         = terraform.workspace
+  lb_name                     = local.env == "production" ? "confluent-lb-production" : "confluent-lb-staging"
+  vpc_name                    = local.env == "production" ? "confluent-production" : "confluent-staging"
+  workspace_suffix            = local.env == "staging" ? "-staging" : "-production"
+  tgw_id                      = "tgw-0681064c35feff4c5"
+  confluent_rt_name           = local.env == "production" ? "production-confluent-extraction-rt-private" : "staging-confluent-extraction-rt-private"
+
+  sn_confluent_extraction_1   = "10.162.128.0/27"
+  sn_confluent_extraction_2   = "10.162.144.0/27"
+  sn_tgw_core_1_cidr          = "10.162.32.0/28"
+  sn_tgw_core_2_cidr          = "10.162.146.0/28"
+  sn_ngw_1_cidr               = "10.162.128.0/28"
+  sn_ngw_2_cidr               = "10.162.148.0/28"
+}
+
+resource "aws_vpc" "confluent_extraction" {
+  cidr_block       = "10.162.128.0/23"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "confluent-extraction${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_confluent_extraction_1" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_confluent_extraction_1
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "sn-confluent-extraction-1${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_confluent_extraction_2" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_confluent_extraction_2
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "sn-confluent-extraction-2${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_tgw_core_1" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_tgw_core_1_cidr
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "sn-tgw-core-1${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_tgw_core_2" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_tgw_core_2_cidr
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "sn-tgw-core-2${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_ngw_1" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_ngw_1_cidr
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "sn-ngw-1${local.workspace_suffix}"
+  }
+}
+
+resource "aws_subnet" "sn_ngw_2" {
+  vpc_id            = aws_vpc.confluent_extraction.id
+  cidr_block        = local.sn_ngw_2_cidr
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "sn-ngw-2${local.workspace_suffix}"
+  }
+}
+
+resource "aws_internet_gateway" "extraction_igw" {
+  vpc_id = aws_vpc.confluent_extraction.id
+
+  tags = {
+    Name = "extraction-igw${local.workspace_suffix}"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gw_1" {
+  allocation_id = aws_eip.nat_eip_1.id
+  subnet_id     = aws_subnet.sn_ngw_1.id
+
+  tags = {
+    Name = "nat-gw-1${local.workspace_suffix}"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gw_2" {
+  allocation_id = aws_eip.nat_eip_2.id
+  subnet_id     = aws_subnet.sn_ngw_2.id
+
+  tags = {
+    Name = "nat-gw-2${local.workspace_suffix}"
+  }
+}
+
+resource "aws_eip" "nat_eip_1" {
+  vpc = true
+
+  tags = {
+    Name = "nat-eip-1${local.workspace_suffix}"
+  }
+}
+
+resource "aws_eip" "nat_eip_2" {
+  vpc = true
+
+  tags = {
+    Name = "nat-eip-2${local.workspace_suffix}"
+  }
+}
+
+resource "aws_ec2_transit_gateway_vpc_attachment" "extraction_tgw_attachment" {
+  transit_gateway_id = local.tgw_id
+  vpc_id             = aws_vpc.confluent_extraction.id
+  subnet_ids         = [
+    aws_subnet.sn_tgw_core_1.id,
+    aws_subnet.sn_tgw_core_2.id
+  ]
+
+  tags = {
+    Name = "extraction${local.workspace_suffix}-tgw-attachment"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route_table" "confluent_rt" {
+  vpc_id = aws_vpc.confluent_extraction.id
+
+  tags = {
+    Name = local.confluent_rt_name
+  }
+}
+
+resource "aws_route" "confluent_route" {
+  route_table_id         = aws_route_table.confluent_rt.id
+  destination_cidr_block = terraform.workspace == "staging" ? "10.162.6.0/24" : "10.162.0.0/23"
+  transit_gateway_id     = local.tgw_id
+}
+
+resource "aws_route" "public_nat_route_1" {
+  route_table_id         = aws_route_table.confluent_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw_1.id
+}
+
+resource "aws_route" "public_nat_route_2" {
+  route_table_id         = aws_route_table.confluent_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw_2.id
+}
