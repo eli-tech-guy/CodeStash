@@ -1,0 +1,8 @@
+{
+    "HomeDirectory": "/sftp-transfer-family-upload",
+    "HomeDirectoryType": "PATH",
+    "Role": "arn:aws:iam::588738578318:role/aws-transfer-family-TransferIdentityProviderRole-9w0drok1luc2",
+    "ServerId": "s-de155266394643c59",
+    "SshPublicKeyBody": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDyNDbSibHytONNgv1zR/G+YUNfd66MEdt1Drf2POSzjSKYNnoGRYj15fcziBR8rhFN28J6yWCqIAdMqwkou6GhqnHoso8ZxSYeoqRvFid8y/q/4v75H+53po+KpPz+0b8dXdwd4a9Wy1wzDDpsgbQjHS2rOImqudtUSmQUYFvheNv9EUKtGqJUia8AmCM+jM1Z1/9u43LoXTz+03cjCXfYmmgeex77sNalt64L1F+W6dDNX4NkoD1X/rvFTuWw447bxiiXgINgMCvqc+2OwySPjSxZ3Z9kl52ISnqxgUaUm0RnF/azJ3DZv2MwcCm3s7AIZmoAGwa4+MHgurlDUeSV",
+    "UserName": "username"
+}

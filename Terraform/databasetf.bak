@@ -1,0 +1,134 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_kms_key" "timescale_key" {
+  description             = "KMS key for encrypting Timescale key pair in Secrets Manager"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+}
+
+resource "aws_secretsmanager_secret" "timescale_key_secret" {
+  name        = "timescale-key-hosted"
+  description = "Timescale key pair private key"
+  kms_key_id  = aws_kms_key.timescale_key.arn
+}
+
+resource "tls_private_key" "timescale_key" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "aws_secretsmanager_secret_version" "timescale_key_secret_version" {
+  secret_id     = aws_secretsmanager_secret.timescale_key_secret.id
+  secret_string = tls_private_key.timescale_key.private_key_pem
+}
+
+resource "aws_key_pair" "timescale_key_pair" {
+  key_name   = "timescale-key"
+  public_key = tls_private_key.timescale_key.public_key_openssh
+}
+
+resource "aws_security_group" "timescale_sg" {
+  name        = "timescale-db-sg"
+  description = "Allow PostgreSQL and SSH"
+
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "timescale_instance" {
+  ami           = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI (adjust based on region)
+  instance_type = "t3.medium"
+  key_name      = aws_key_pair.timescale_key_pair.key_name
+  security_groups = [aws_security_group.timescale_sg.name]
+
+  tags = {
+    Name = "TimescaleDB-dev"
+  }
+
+  user_data = <<-EOT
+    #!/bin/bash
+    amazon-linux-extras enable postgresql14
+    yum install -y postgresql14
+
+    # Add TimescaleDB repository
+    amazon-linux-extras enable timescaledb
+    yum install -y timescaledb-postgresql-14
+
+    # Initialize TimescaleDB
+    /usr/bin/postgresql-14-setup initdb
+
+    # Set PostgreSQL password to 'test'
+    echo "ALTER USER postgres PASSWORD 'test';" > /tmp/init.sql
+
+    # Enable TimescaleDB in postgresql.conf
+    echo "shared_preload_libraries = 'timescaledb'" >> /var/lib/pgsql/14/data/postgresql.conf
+    echo "listen_addresses = '*'" >> /var/lib/pgsql/14/data/postgresql.conf
+    echo "port = 5432" >> /var/lib/pgsql/14/data/postgresql.conf
+
+    # Update pg_hba.conf to allow all connections
+    echo "host    all             all             0.0.0.0/0            md5" >> /var/lib/pgsql/14/data/pg_hba.conf
+
+    # Restart PostgreSQL service
+    systemctl enable postgresql-14
+    systemctl restart postgresql-14
+
+    # Apply the initial SQL to set the password
+    PGPASSWORD='test' psql -U postgres -f /tmp/init.sql
+
+    # Ensure `psql` binary is in the PATH
+    echo 'export PATH=$PATH:/usr/pgsql-14/bin' >> /etc/profile
+    export PATH=$PATH:/usr/pgsql-14/bin
+  EOT
+}
+
+resource "null_resource" "create_tables" {
+  provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      host        = aws_instance.timescale_instance.public_ip
+      user        = "ec2-user"
+      private_key = tls_private_key.timescale_key.private_key_pem
+    }
+
+    inline = [
+      # Ensure `psql` is installed and in the PATH
+      "if ! command -v psql &> /dev/null; then echo 'Installing psql'; sudo yum install -y postgresql; fi",
+      "if ! command -v psql &> /dev/null; then echo 'psql not found in PATH'; exit 1; fi",
+
+      # Ensure PostgreSQL service is running
+      "sudo systemctl restart postgresql-14",
+
+      # Create SQL file
+      "cat <<EOF > /tmp/create_tables.sql",
+      "CREATE TABLE IF NOT EXISTS metrics (id SERIAL PRIMARY KEY, timestamp TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL);",
+      "CREATE TABLE IF NOT EXISTS events (id SERIAL PRIMARY KEY, event_time TIMESTAMPTZ NOT NULL, description TEXT);",
+      "EOF",
+
+      # Run SQL commands
+      "export PGPASSWORD='test'",
+      "psql -h 127.0.0.1 -U postgres -d postgres -f /tmp/create_tables.sql"
+    ]
+  }
+
+  depends_on = [aws_instance.timescale_instance]
+}
