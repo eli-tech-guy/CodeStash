@@ -106,7 +106,7 @@ def manage_outputcombined_versions(connection):
 def lambda_handler(event, context):
     connection = pg8000.connect(
         user="postgres",
-        password="~t8:3o8op$*)1}e+Erj7mLd[?vD*",
+        password="",
         host="sip-automation-instance-1.cxekmmq8m71d.eu-west-2.rds.amazonaws.com",
         port=5432,
         database="postgres"
@@ -117,8 +117,8 @@ def lambda_handler(event, context):
     s3_key = 'defender_output.xlsx'
     sharepoint_site_url = "https://tsbcloud.sharepoint.com/sites/CISOAutomation"
     sharepoint_folder_url = "/sites/CISOAutomation/Shared%20Documents/Reports"
-    sharepoint_username = "elishua.mcpherson@tsb.co.uk"
-    sharepoint_password = "London@20.24"
+    sharepoint_username = ""
+    sharepoint_password = ""
  
     try:
         new_table_name = manage_outputcombined_versions(connection)
